@@ -925,7 +925,7 @@ impl ModelClient {
             info!(
                 "sending max_output_tokens={max_output_tokens} for model `{}` to provider `{}`",
                 model_info.slug,
-                provider.info().name,
+                provider.name,
             );
         }
         let request = ResponsesApiRequest {
