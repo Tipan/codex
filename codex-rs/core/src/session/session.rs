@@ -1144,6 +1144,7 @@ impl Session {
                     session_configuration.session_source.clone(),
                     session_configuration.originator.clone(),
                     config.model_verbosity,
+                    config.model_max_output_tokens,
                     config.features.enabled(Feature::EnableRequestCompression),
                     config.features.enabled(Feature::RuntimeMetrics),
                     Self::build_model_client_beta_features_header(config.as_ref()),
@@ -1153,7 +1154,6 @@ impl Session {
                     attestation_provider,
                     config.http_client_factory(),
                 )
-                .with_max_output_tokens(config.model_max_output_tokens)
                 .with_prompt_cache_key_override(
                     crate::guardian::prompt_cache_key_override_for_review_session(
                         &session_configuration.session_source,

@@ -198,7 +198,7 @@ fn session_telemetry_for_request(
 ///
 /// This is intentionally kept minimal so `ModelClient` does not need to hold a full `Config`. Most
 /// configuration is per turn and is passed explicitly to streaming/unary methods.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct ModelClientState {
     thread_id: ThreadId,
     provider: SharedModelProvider,
@@ -438,6 +438,7 @@ impl ModelClient {
         session_source: SessionSource,
         originator: String,
         model_verbosity: Option<VerbosityConfig>,
+        max_output_tokens: Option<i64>,
         enable_request_compression: bool,
         include_timing_metrics: bool,
         beta_features_header: Option<String>,
@@ -461,7 +462,7 @@ impl ModelClient {
                 session_source,
                 originator,
                 model_verbosity,
-                max_output_tokens: None,
+                max_output_tokens,
                 enable_request_compression,
                 include_timing_metrics,
                 beta_features_header,
@@ -483,14 +484,6 @@ impl ModelClient {
         prompt_cache_key_override: Option<String>,
     ) -> Self {
         self.prompt_cache_key_override = prompt_cache_key_override;
-        self
-    }
-
-    /// Sets the `max_output_tokens` forwarded to the model provider on every
-    /// Responses API request for this client. `None` (the default) leaves the
-    /// parameter unset so the provider default applies.
-    pub(crate) fn with_max_output_tokens(mut self, max_output_tokens: Option<i64>) -> Self {
-        Arc::make_mut(&mut self.state).max_output_tokens = max_output_tokens;
         self
     }
 
