@@ -105,6 +105,7 @@ use tokio::sync::oneshot::error::TryRecvError;
 use tokio_tungstenite::tungstenite::Error;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_util::sync::CancellationToken;
+use tracing::info;
 use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
@@ -197,7 +198,7 @@ fn session_telemetry_for_request(
 ///
 /// This is intentionally kept minimal so `ModelClient` does not need to hold a full `Config`. Most
 /// configuration is per turn and is passed explicitly to streaming/unary methods.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ModelClientState {
     thread_id: ThreadId,
     provider: SharedModelProvider,
@@ -205,6 +206,7 @@ struct ModelClientState {
     session_source: SessionSource,
     originator: String,
     model_verbosity: Option<VerbosityConfig>,
+    max_output_tokens: Option<i64>,
     enable_request_compression: bool,
     include_timing_metrics: bool,
     beta_features_header: Option<String>,
@@ -322,6 +324,7 @@ fn responses_request_properties_match(
         include: previous_include,
         service_tier: previous_service_tier,
         prompt_cache_key: previous_prompt_cache_key,
+        max_output_tokens: previous_max_output_tokens,
         text: previous_text,
         client_metadata: _,
     } = previous;
@@ -339,6 +342,7 @@ fn responses_request_properties_match(
         include: current_include,
         service_tier: current_service_tier,
         prompt_cache_key: current_prompt_cache_key,
+        max_output_tokens: current_max_output_tokens,
         text: current_text,
         client_metadata: _,
     } = current;
@@ -356,6 +360,7 @@ fn responses_request_properties_match(
         && previous_include == current_include
         && previous_service_tier == current_service_tier
         && previous_prompt_cache_key == current_prompt_cache_key
+        && previous_max_output_tokens == current_max_output_tokens
         && previous_text == current_text
 }
 
@@ -456,6 +461,7 @@ impl ModelClient {
                 session_source,
                 originator,
                 model_verbosity,
+                max_output_tokens: None,
                 enable_request_compression,
                 include_timing_metrics,
                 beta_features_header,
@@ -477,6 +483,14 @@ impl ModelClient {
         prompt_cache_key_override: Option<String>,
     ) -> Self {
         self.prompt_cache_key_override = prompt_cache_key_override;
+        self
+    }
+
+    /// Sets the `max_output_tokens` forwarded to the model provider on every
+    /// Responses API request for this client. `None` (the default) leaves the
+    /// parameter unset so the provider default applies.
+    pub(crate) fn with_max_output_tokens(mut self, max_output_tokens: Option<i64>) -> Self {
+        Arc::make_mut(&mut self.state).max_output_tokens = max_output_tokens;
         self
     }
 
@@ -593,6 +607,7 @@ impl ModelClient {
             reasoning,
             service_tier,
             prompt_cache_key,
+            max_output_tokens,
             text,
             ..
         } = request;
@@ -606,6 +621,7 @@ impl ModelClient {
             reasoning,
             service_tier: service_tier.as_deref(),
             prompt_cache_key: prompt_cache_key.as_deref(),
+            max_output_tokens,
             text,
         };
 
@@ -904,6 +920,14 @@ impl ModelClient {
         );
         let prompt_cache_key = Some(self.prompt_cache_key(responses_metadata));
         let service_tier = model_info.service_tier_for_request(service_tier);
+        let max_output_tokens = self.state.max_output_tokens;
+        if let Some(max_output_tokens) = max_output_tokens {
+            info!(
+                "sending max_output_tokens={max_output_tokens} for model `{}` to provider `{}`",
+                model_info.slug,
+                provider.info().name,
+            );
+        }
         let request = ResponsesApiRequest {
             model: model_info.slug.clone(),
             instructions,
@@ -918,6 +942,7 @@ impl ModelClient {
             include,
             service_tier,
             prompt_cache_key,
+            max_output_tokens,
             text,
             client_metadata: Some(responses_metadata.client_metadata()),
         };

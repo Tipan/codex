@@ -40,6 +40,8 @@ pub struct CompactionInput<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<TextControls>,
 }
 
@@ -268,6 +270,10 @@ pub struct ResponsesApiRequest {
     pub service_tier: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
+    /// Maximum number of output tokens the model may generate for this
+    /// response. Omitted from the request when `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<TextControls>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -291,6 +297,7 @@ impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
             include: &request.include,
             service_tier: request.service_tier.as_deref(),
             prompt_cache_key: request.prompt_cache_key.as_deref(),
+            max_output_tokens: request.max_output_tokens,
             text: request.text.as_ref(),
             generate: None,
             client_metadata: request.client_metadata.clone(),
@@ -320,6 +327,8 @@ pub struct ResponseCreateWsRequest<'a> {
     pub service_tier: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<&'a TextControls>,
     #[serde(skip_serializing_if = "Option::is_none")]

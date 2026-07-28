@@ -946,6 +946,7 @@ mod tests {
             include: vec!["reasoning.encrypted_content".to_string()],
             service_tier: Some("priority".to_string()),
             prompt_cache_key: Some("cache-key".to_string()),
+            max_output_tokens: None,
             text: None,
             client_metadata: Some(HashMap::from([(
                 "traceparent".to_string(),

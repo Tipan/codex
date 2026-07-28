@@ -5505,6 +5505,11 @@
       ],
       "description": "Optional path to a file containing model instructions that will override the built-in instructions for the selected model. Users are STRONGLY DISCOURAGED from using this field, as deviating from the instructions sanctioned by Codex will likely degrade model performance."
     },
+    "model_max_output_tokens": {
+      "description": "Maximum number of output tokens the model may generate per response; forwarded as `max_output_tokens` in Responses API requests.",
+      "format": "int64",
+      "type": "integer"
+    },
     "model_provider": {
       "description": "Provider to use from the model_providers map.",
       "type": "string"

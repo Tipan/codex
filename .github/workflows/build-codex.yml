@@ -1,0 +1,76 @@
+# Build the `codex` CLI binary for this fork.
+#
+# This is a self-contained workflow that does not depend on the protected
+# codesigning environments or self-hosted runners used by the upstream
+# `rust-release.yml`. It builds a single debug/release `codex` binary on a
+# GitHub-hosted macOS runner and uploads it as an artifact.
+#
+# Trigger it manually from the Actions tab ("Run workflow"), or it runs
+# automatically on pushes to the configured branches.
+
+name: build-codex
+
+on:
+  push:
+    branches:
+      - feat/max-output-tokens
+      - main
+  workflow_dispatch:
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
+jobs:
+  build:
+    name: Build codex (${{ matrix.target }})
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: codex-rs
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs_on: macos-15
+            target: aarch64-apple-darwin
+          - runs_on: macos-15
+            target: x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Cargo build (release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --target "${{ matrix.target }}" --release --bin codex
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="dist/${{ matrix.target }}"
+          mkdir -p "$dest"
+          cp "target/${{ matrix.target }}/release/codex" "$dest/codex-${{ matrix.target }}"
+          tar -C "$dest" -czf "$dest/codex-${{ matrix.target }}.tar.gz" "codex-${{ matrix.target }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-${{ matrix.target }}
+          path: codex-rs/dist/${{ matrix.target }}/*
+          if-no-files-found: error

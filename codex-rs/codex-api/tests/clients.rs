@@ -331,6 +331,7 @@ async fn responses_client_stream_request_preserves_item_ids() -> Result<()> {
         include: Vec::new(),
         service_tier: None,
         prompt_cache_key: None,
+        max_output_tokens: None,
         text: None,
         client_metadata: None,
     };
@@ -418,6 +419,7 @@ async fn streaming_client_retries_on_transport_error() -> Result<()> {
         include: Vec::new(),
         service_tier: None,
         prompt_cache_key: None,
+        max_output_tokens: None,
         text: None,
         client_metadata: None,
     };
@@ -538,6 +540,7 @@ async fn azure_store_sends_ids_and_headers() -> Result<()> {
         include: Vec::new(),
         service_tier: None,
         prompt_cache_key: None,
+        max_output_tokens: None,
         text: None,
         client_metadata: None,
     };
