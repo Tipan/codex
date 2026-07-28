@@ -1743,6 +1743,11 @@
           "description": "Additional HTTP headers to include in requests to this provider where the (key, value) pairs are the header name and value.",
           "type": "object"
         },
+        "max_output_tokens": {
+          "description": "Maximum number of output tokens the model may generate per response; forwarded as `max_output_tokens` in Responses API requests. Useful when a provider applies a small default cap that causes `Incomplete response returned, reason: max_output_tokens` errors.",
+          "format": "int64",
+          "type": "integer"
+        },
         "name": {
           "default": "",
           "description": "Friendly display name.",
@@ -5504,11 +5509,6 @@
         }
       ],
       "description": "Optional path to a file containing model instructions that will override the built-in instructions for the selected model. Users are STRONGLY DISCOURAGED from using this field, as deviating from the instructions sanctioned by Codex will likely degrade model performance."
-    },
-    "model_max_output_tokens": {
-      "description": "Maximum number of output tokens the model may generate per response; forwarded as `max_output_tokens` in Responses API requests.",
-      "format": "int64",
-      "type": "integer"
     },
     "model_provider": {
       "description": "Provider to use from the model_providers map.",

@@ -121,6 +121,11 @@ pub struct ModelProviderInfo {
     pub env_http_headers: Option<HashMap<String, String>>,
     /// Maximum number of times to retry a failed HTTP request to this provider.
     pub request_max_retries: Option<u64>,
+    /// Maximum number of output tokens the model may generate per response;
+    /// forwarded as `max_output_tokens` in Responses API requests. Useful when
+    /// a provider applies a small default cap that causes
+    /// `Incomplete response returned, reason: max_output_tokens` errors.
+    pub max_output_tokens: Option<i64>,
     /// Number of times to retry reconnecting a dropped streaming response before failing.
     pub stream_max_retries: Option<u64>,
     /// Idle timeout (in milliseconds) to wait for activity on a streaming response before treating
@@ -358,6 +363,7 @@ impl ModelProviderInfo {
             ),
             // Use global defaults for retry/timeout unless overridden in config.toml.
             request_max_retries: None,
+            max_output_tokens: None,
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
             websocket_connect_timeout_ms: None,
@@ -392,6 +398,7 @@ impl ModelProviderInfo {
             )])),
             env_http_headers: None,
             request_max_retries: None,
+            max_output_tokens: None,
             stream_max_retries: None,
             stream_idle_timeout_ms: None,
             websocket_connect_timeout_ms: None,
@@ -539,6 +546,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         query_params: None,
         http_headers: None,
         env_http_headers: None,
+        max_output_tokens: None,
         request_max_retries: None,
         stream_max_retries: None,
         stream_idle_timeout_ms: None,

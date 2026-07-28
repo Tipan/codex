@@ -19,26 +19,20 @@ on:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  # Split debug info into a separate dSYM and strip it from the binary so the
+  # shipped artifact is much smaller (matches the upstream release behavior).
+  CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO: packed
 
 jobs:
   build:
-    name: Build codex (${{ matrix.target }})
-    runs-on: ${{ matrix.runs_on }}
+    name: Build codex (aarch64-apple-darwin)
+    runs-on: macos-15
     timeout-minutes: 90
     permissions:
       contents: read
     defaults:
       run:
         working-directory: codex-rs
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runs_on: macos-15
-            target: aarch64-apple-darwin
-          - runs_on: macos-15
-            target: x86_64-apple-darwin
 
     steps:
       - uses: actions/checkout@v4
@@ -47,30 +41,38 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
-          targets: ${{ matrix.target }}
+          targets: aarch64-apple-darwin
 
       - name: Configure rusty_v8 artifact overrides and verify checksums
         uses: ./.github/actions/setup-rusty-v8
         with:
-          target: ${{ matrix.target }}
+          target: aarch64-apple-darwin
 
       - name: Cargo build (release)
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --target "${{ matrix.target }}" --release --bin codex
+          cargo build --target aarch64-apple-darwin --release --bin codex
+
+      - name: Strip binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="target/aarch64-apple-darwin/release/codex"
+          strip -S "$bin"
+          ls -lh "$bin"
 
       - name: Stage binary
         shell: bash
         run: |
           set -euo pipefail
-          dest="dist/${{ matrix.target }}"
+          dest="dist/aarch64-apple-darwin"
           mkdir -p "$dest"
-          cp "target/${{ matrix.target }}/release/codex" "$dest/codex-${{ matrix.target }}"
-          tar -C "$dest" -czf "$dest/codex-${{ matrix.target }}.tar.gz" "codex-${{ matrix.target }}"
+          cp "target/aarch64-apple-darwin/release/codex" "$dest/codex-aarch64-apple-darwin"
+          tar -C "$dest" -czf "$dest/codex-aarch64-apple-darwin.tar.gz" "codex-aarch64-apple-darwin"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: codex-${{ matrix.target }}
-          path: codex-rs/dist/${{ matrix.target }}/*
+          name: codex-aarch64-apple-darwin
+          path: codex-rs/dist/aarch64-apple-darwin/*
           if-no-files-found: error

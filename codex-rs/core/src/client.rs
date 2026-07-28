@@ -206,7 +206,6 @@ struct ModelClientState {
     session_source: SessionSource,
     originator: String,
     model_verbosity: Option<VerbosityConfig>,
-    max_output_tokens: Option<i64>,
     enable_request_compression: bool,
     include_timing_metrics: bool,
     beta_features_header: Option<String>,
@@ -438,7 +437,6 @@ impl ModelClient {
         session_source: SessionSource,
         originator: String,
         model_verbosity: Option<VerbosityConfig>,
-        max_output_tokens: Option<i64>,
         enable_request_compression: bool,
         include_timing_metrics: bool,
         beta_features_header: Option<String>,
@@ -462,7 +460,6 @@ impl ModelClient {
                 session_source,
                 originator,
                 model_verbosity,
-                max_output_tokens,
                 enable_request_compression,
                 include_timing_metrics,
                 beta_features_header,
@@ -913,7 +910,7 @@ impl ModelClient {
         );
         let prompt_cache_key = Some(self.prompt_cache_key(responses_metadata));
         let service_tier = model_info.service_tier_for_request(service_tier);
-        let max_output_tokens = self.state.max_output_tokens;
+        let max_output_tokens = self.state.provider.info().max_output_tokens;
         if let Some(max_output_tokens) = max_output_tokens {
             info!(
                 "sending max_output_tokens={max_output_tokens} for model `{}` to provider `{}`",
