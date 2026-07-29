@@ -19,15 +19,12 @@ on:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-  # Split debug info into a separate dSYM and strip it from the binary so the
-  # shipped artifact is much smaller (matches the upstream release behavior).
-  CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO: packed
 
 jobs:
   build:
     name: Build codex (aarch64-apple-darwin)
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: read
     defaults:
