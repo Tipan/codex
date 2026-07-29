@@ -56,7 +56,9 @@ jobs:
         run: |
           set -euo pipefail
           bin="target/aarch64-apple-darwin/release/codex"
-          strip -S "$bin"
+          # Match upstream: -S removes debug symbols, -x removes local symbol
+          # table entries (shrinks __LINKEDIT from ~77MB to ~13MB).
+          strip -S -x "$bin"
           ls -lh "$bin"
 
       - name: Stage binary
