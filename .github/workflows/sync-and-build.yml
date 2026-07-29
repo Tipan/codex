@@ -1,0 +1,207 @@
+# Auto-sync with upstream openai/codex releases and build a patched binary.
+#
+# Runs daily (and on manual dispatch). Checks openai/codex for new stable
+# release tags (rust-vX.Y.Z, excluding alpha/beta). When a new release is
+# found, it:
+#   1. Creates a branch from that tag
+#   2. Applies the max_output_tokens patch (patches/max-output-tokens.patch)
+#   3. Sets the version to <upstream-version>-maxtok
+#   4. Copies in the build-codex.yml workflow
+#   5. Builds the codex binary for macOS ARM64 and uploads it as an artifact
+#
+# The branch name build/<tag> records which upstream version was built.
+
+name: sync-and-build
+
+on:
+  schedule:
+    # Every day at 06:00 UTC (14:00 Beijing time)
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Upstream tag to build (e.g. rust-v0.146.0). Leave empty to auto-detect latest."
+        required: false
+        default: ""
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
+jobs:
+  detect:
+    name: Detect latest upstream release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.detect.outputs.tag }}
+      version: ${{ steps.detect.outputs.version }}
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Detect latest stable release tag
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            # Query GitHub API for openai/codex tags, filter stable releases
+            tags=$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/openai/codex/tags?per_page=100" \
+              | jq -r '.[].name' \
+              | grep -E '^rust-v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -V -r)
+            tag=$(echo "$tags" | head -1)
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "No stable release tag found."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          version="${tag#rust-v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Latest stable release: $tag (version $version)"
+
+      - name: Check if already built
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.detect.outputs.tag }}"
+          if [[ -z "$tag" ]]; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          branch="build/${tag}"
+          # Check if branch already exists on mine remote
+          if git ls-remote --heads "https://github.com/${{ github.repository }}.git" "$branch" | grep -q "$branch"; then
+            echo "Branch $branch already exists, skipping build."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build codex ${{ needs.detect.outputs.tag }}
+    needs: detect
+    if: needs.detect.outputs.should_build == 'true'
+    runs-on: macos-15
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    env:
+      UPSTREAM_TAG: ${{ needs.detect.outputs.tag }}
+      UPSTREAM_VERSION: ${{ needs.detect.outputs.version }}
+
+    steps:
+      - name: Checkout fork (for patch and build workflow)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configure git for push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream tag
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/openai/codex.git
+          git fetch upstream --tags --depth 1 "$UPSTREAM_TAG"
+
+      - name: Create build branch from upstream tag
+        run: |
+          set -euo pipefail
+          git checkout -b "build/${UPSTREAM_TAG}" "$UPSTREAM_TAG"
+
+      - name: Apply max_output_tokens patch
+        run: |
+          set -euo pipefail
+          # Apply the core feature patch (excluding CI/version changes).
+          # Use --reject so partial application is visible if upstream
+          # refactored affected files.
+          git apply --reject patches/max-output-tokens.patch
+          # Check for rejected hunks
+          if find . -name "*.rej" | grep -q .; then
+            echo "::error::Patch rejected for some files. Manual update needed."
+            find . -name "*.rej" -print
+            exit 1
+          fi
+
+      - name: Set version to <upstream>-maxtok
+        run: |
+          set -euo pipefail
+          new_version="${UPSTREAM_VERSION}-maxtok"
+          sed -i '' "s/^version = \".*\"/version = \"${new_version}\"/" codex-rs/Cargo.toml
+          echo "Set version to $new_version"
+          grep '^version' codex-rs/Cargo.toml | head -1
+
+      - name: Copy build workflow into branch
+        run: |
+          # The build-codex.yml from the fork's default branch is already
+          # present in the working tree (checked out before git checkout).
+          # Re-add it since the upstream tag won't have it.
+          git checkout "${{ github.ref_name }}" -- .github/workflows/build-codex.yml 2>/dev/null || true
+
+      - name: Commit changes
+        run: |
+          git add -A
+          git commit -m "Apply max_output_tokens patch + build workflow for ${UPSTREAM_TAG}
+
+          Based on upstream ${UPSTREAM_TAG} (version ${UPSTREAM_VERSION}).
+          Applies patches/max-output-tokens.patch for provider-level
+          max_output_tokens config support."
+
+      - name: Push build branch
+        run: |
+          set -euo pipefail
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            "build/${UPSTREAM_TAG}"
+
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Configure rusty_v8 artifact overrides and verify checksums
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: aarch64-apple-darwin
+
+      - name: Cargo build (release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --target aarch64-apple-darwin --release --bin codex
+
+      - name: Strip binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="target/aarch64-apple-darwin/release/codex"
+          strip -S -x "$bin"
+          ls -lh "$bin"
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="dist/aarch64-apple-darwin"
+          mkdir -p "$dest"
+          cp "target/aarch64-apple-darwin/release/codex" "$dest/codex-aarch64-apple-darwin"
+          tar -C "$dest" -czf "$dest/codex-aarch64-apple-darwin.tar.gz" "codex-aarch64-apple-darwin"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-${{ needs.detect.outputs.tag }}-aarch64-apple-darwin
+          path: codex-rs/dist/aarch64-apple-darwin/*
+          if-no-files-found: error

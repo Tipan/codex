@@ -1,0 +1,463 @@
+diff --git a/codex-rs/app-server/src/request_processors/thread_processor_tests.rs b/codex-rs/app-server/src/request_processors/thread_processor_tests.rs
+--- a/codex-rs/app-server/src/request_processors/thread_processor_tests.rs
++++ b/codex-rs/app-server/src/request_processors/thread_processor_tests.rs
+@@ -684,6 +684,7 @@ mod thread_processor_behavior_tests {
+             http_headers: None,
+             env_http_headers: None,
+             request_max_retries: None,
++            max_output_tokens: None,
+             stream_max_retries: None,
+             stream_idle_timeout_ms: None,
+             websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/codex-api/src/common.rs b/codex-rs/codex-api/src/common.rs
+--- a/codex-rs/codex-api/src/common.rs
++++ b/codex-rs/codex-api/src/common.rs
+@@ -40,6 +40,8 @@ pub struct CompactionInput<'a> {
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub prompt_cache_key: Option<&'a str>,
+     #[serde(skip_serializing_if = "Option::is_none")]
++    pub max_output_tokens: Option<i64>,
++    #[serde(skip_serializing_if = "Option::is_none")]
+     pub text: Option<TextControls>,
+ }
+ 
+@@ -268,6 +270,10 @@ pub struct ResponsesApiRequest {
+     pub service_tier: Option<String>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub prompt_cache_key: Option<String>,
++    /// Maximum number of output tokens the model may generate for this
++    /// response. Omitted from the request when `None`.
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub max_output_tokens: Option<i64>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub text: Option<TextControls>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+@@ -291,6 +297,7 @@ impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
+             include: &request.include,
+             service_tier: request.service_tier.as_deref(),
+             prompt_cache_key: request.prompt_cache_key.as_deref(),
++            max_output_tokens: request.max_output_tokens,
+             text: request.text.as_ref(),
+             generate: None,
+             client_metadata: request.client_metadata.clone(),
+@@ -321,6 +328,8 @@ pub struct ResponseCreateWsRequest<'a> {
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub prompt_cache_key: Option<&'a str>,
+     #[serde(skip_serializing_if = "Option::is_none")]
++    pub max_output_tokens: Option<i64>,
++    #[serde(skip_serializing_if = "Option::is_none")]
+     pub text: Option<&'a TextControls>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub generate: Option<bool>,
+diff --git a/codex-rs/codex-api/src/endpoint/responses_websocket.rs b/codex-rs/codex-api/src/endpoint/responses_websocket.rs
+--- a/codex-rs/codex-api/src/endpoint/responses_websocket.rs
++++ b/codex-rs/codex-api/src/endpoint/responses_websocket.rs
+@@ -946,6 +946,7 @@ mod tests {
+             include: vec!["reasoning.encrypted_content".to_string()],
+             service_tier: Some("priority".to_string()),
+             prompt_cache_key: Some("cache-key".to_string()),
++            max_output_tokens: None,
+             text: None,
+             client_metadata: Some(HashMap::from([(
+                 "traceparent".to_string(),
+diff --git a/codex-rs/codex-api/tests/clients.rs b/codex-rs/codex-api/tests/clients.rs
+--- a/codex-rs/codex-api/tests/clients.rs
++++ b/codex-rs/codex-api/tests/clients.rs
+@@ -331,6 +331,7 @@ async fn responses_client_stream_request_preserves_item_ids() -> Result<()> {
+         include: Vec::new(),
+         service_tier: None,
+         prompt_cache_key: None,
++        max_output_tokens: None,
+         text: None,
+         client_metadata: None,
+     };
+@@ -418,6 +419,7 @@ async fn streaming_client_retries_on_transport_error() -> Result<()> {
+         include: Vec::new(),
+         service_tier: None,
+         prompt_cache_key: None,
++        max_output_tokens: None,
+         text: None,
+         client_metadata: None,
+     };
+@@ -538,6 +540,7 @@ async fn azure_store_sends_ids_and_headers() -> Result<()> {
+         include: Vec::new(),
+         service_tier: None,
+         prompt_cache_key: None,
++        max_output_tokens: None,
+         text: None,
+         client_metadata: None,
+     };
+diff --git a/codex-rs/config/src/thread_config.rs b/codex-rs/config/src/thread_config.rs
+--- a/codex-rs/config/src/thread_config.rs
++++ b/codex-rs/config/src/thread_config.rs
+@@ -308,6 +308,7 @@ mod tests {
+             http_headers: None,
+             env_http_headers: None,
+             request_max_retries: None,
++            max_output_tokens: None,
+             stream_max_retries: None,
+             stream_idle_timeout_ms: None,
+             websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/config/src/thread_config/remote.rs b/codex-rs/config/src/thread_config/remote.rs
+--- a/codex-rs/config/src/thread_config/remote.rs
++++ b/codex-rs/config/src/thread_config/remote.rs
+@@ -185,6 +185,7 @@ fn model_provider_from_proto(
+         http_headers: provider.http_headers.map(|map| map.values),
+         env_http_headers: provider.env_http_headers.map(|map| map.values),
+         request_max_retries: provider.request_max_retries,
++        max_output_tokens: None,
+         stream_max_retries: provider.stream_max_retries,
+         stream_idle_timeout_ms: provider.stream_idle_timeout_ms,
+         websocket_connect_timeout_ms: provider.websocket_connect_timeout_ms,
+@@ -213,6 +214,7 @@ fn model_provider_to_proto(
+         http_headers,
+         env_http_headers,
+         request_max_retries,
++        max_output_tokens: _,
+         stream_max_retries,
+         stream_idle_timeout_ms,
+         websocket_connect_timeout_ms,
+diff --git a/codex-rs/core/config.schema.json b/codex-rs/core/config.schema.json
+--- a/codex-rs/core/config.schema.json
++++ b/codex-rs/core/config.schema.json
+@@ -1743,6 +1743,11 @@
+           "description": "Additional HTTP headers to include in requests to this provider where the (key, value) pairs are the header name and value.",
+           "type": "object"
+         },
++        "max_output_tokens": {
++          "description": "Maximum number of output tokens the model may generate per response; forwarded as `max_output_tokens` in Responses API requests. Useful when a provider applies a small default cap that causes `Incomplete response returned, reason: max_output_tokens` errors.",
++          "format": "int64",
++          "type": "integer"
++        },
+         "name": {
+           "default": "",
+           "description": "Friendly display name.",
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -105,6 +105,7 @@ use tokio::sync::oneshot::error::TryRecvError;
+ use tokio_tungstenite::tungstenite::Error;
+ use tokio_tungstenite::tungstenite::Message;
+ use tokio_util::sync::CancellationToken;
++use tracing::info;
+ use tracing::instrument;
+ use tracing::trace;
+ use tracing::warn;
+@@ -322,6 +323,7 @@ fn responses_request_properties_match(
+         include: previous_include,
+         service_tier: previous_service_tier,
+         prompt_cache_key: previous_prompt_cache_key,
++        max_output_tokens: previous_max_output_tokens,
+         text: previous_text,
+         client_metadata: _,
+     } = previous;
+@@ -339,6 +341,7 @@ fn responses_request_properties_match(
+         include: current_include,
+         service_tier: current_service_tier,
+         prompt_cache_key: current_prompt_cache_key,
++        max_output_tokens: current_max_output_tokens,
+         text: current_text,
+         client_metadata: _,
+     } = current;
+@@ -356,6 +359,7 @@ fn responses_request_properties_match(
+         && previous_include == current_include
+         && previous_service_tier == current_service_tier
+         && previous_prompt_cache_key == current_prompt_cache_key
++        && previous_max_output_tokens == current_max_output_tokens
+         && previous_text == current_text
+ }
+ 
+@@ -593,6 +597,7 @@ impl ModelClient {
+             reasoning,
+             service_tier,
+             prompt_cache_key,
++            max_output_tokens,
+             text,
+             ..
+         } = request;
+@@ -606,6 +611,7 @@ impl ModelClient {
+             reasoning,
+             service_tier: service_tier.as_deref(),
+             prompt_cache_key: prompt_cache_key.as_deref(),
++            max_output_tokens,
+             text,
+         };
+ 
+@@ -904,6 +910,14 @@ impl ModelClient {
+         );
+         let prompt_cache_key = Some(self.prompt_cache_key(responses_metadata));
+         let service_tier = model_info.service_tier_for_request(service_tier);
++        let max_output_tokens = self.state.provider.info().max_output_tokens;
++        if let Some(max_output_tokens) = max_output_tokens {
++            info!(
++                "sending max_output_tokens={max_output_tokens} for model `{}` to provider `{}`",
++                model_info.slug,
++                provider.name,
++            );
++        }
+         let request = ResponsesApiRequest {
+             model: model_info.slug.clone(),
+             instructions,
+@@ -918,6 +932,7 @@ impl ModelClient {
+             include,
+             service_tier,
+             prompt_cache_key,
++            max_output_tokens,
+             text,
+             client_metadata: Some(responses_metadata.client_metadata()),
+         };
+diff --git a/codex-rs/core/src/client_common_tests.rs b/codex-rs/core/src/client_common_tests.rs
+--- a/codex-rs/core/src/client_common_tests.rs
++++ b/codex-rs/core/src/client_common_tests.rs
+@@ -124,6 +124,7 @@ fn serializes_text_verbosity_when_set() {
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
++        max_output_tokens: None,
+         service_tier: None,
+         text: Some(TextControls {
+             verbosity: Some(OpenAiVerbosity::Low),
+@@ -171,6 +172,7 @@ fn serializes_text_schema_with_strict_format() {
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
++        max_output_tokens: None,
+         service_tier: None,
+         text: Some(text_controls),
+         client_metadata: None,
+@@ -232,6 +234,7 @@ fn omits_text_when_not_set() {
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
++        max_output_tokens: None,
+         service_tier: None,
+         text: None,
+         client_metadata: None,
+@@ -256,6 +259,7 @@ fn serializes_flex_service_tier_when_set() {
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
++        max_output_tokens: None,
+         service_tier: Some(ServiceTier::Flex.to_string()),
+         text: None,
+         client_metadata: None,
+diff --git a/codex-rs/core/src/compact_tests.rs b/codex-rs/core/src/compact_tests.rs
+--- a/codex-rs/core/src/compact_tests.rs
++++ b/codex-rs/core/src/compact_tests.rs
+@@ -276,6 +276,7 @@ fn should_use_remote_compact_task_for_azure_provider() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/core/tests/responses_headers.rs b/codex-rs/core/tests/responses_headers.rs
+--- a/codex-rs/core/tests/responses_headers.rs
++++ b/codex-rs/core/tests/responses_headers.rs
+@@ -83,6 +83,7 @@ async fn responses_stream_includes_subagent_header_on_review() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: Some(0),
++        max_output_tokens: None,
+         stream_max_retries: Some(0),
+         stream_idle_timeout_ms: Some(5_000),
+         websocket_connect_timeout_ms: None,
+@@ -219,6 +220,7 @@ async fn responses_stream_includes_subagent_header_on_other() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: Some(0),
++        max_output_tokens: None,
+         stream_max_retries: Some(0),
+         stream_idle_timeout_ms: Some(5_000),
+         websocket_connect_timeout_ms: None,
+@@ -336,6 +338,7 @@ async fn responses_respects_model_info_overrides_from_config() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: Some(0),
++        max_output_tokens: None,
+         stream_max_retries: Some(0),
+         stream_idle_timeout_ms: Some(5_000),
+         websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/core/tests/suite/client.rs b/codex-rs/core/tests/suite/client.rs
+--- a/codex-rs/core/tests/suite/client.rs
++++ b/codex-rs/core/tests/suite/client.rs
+@@ -1445,6 +1445,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: Some(0),
++        max_output_tokens: None,
+         stream_max_retries: Some(0),
+         stream_idle_timeout_ms: Some(5_000),
+         websocket_connect_timeout_ms: None,
+@@ -3187,6 +3188,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: Some(0),
++        max_output_tokens: None,
+         stream_max_retries: Some(0),
+         stream_idle_timeout_ms: Some(5_000),
+         websocket_connect_timeout_ms: None,
+@@ -3845,6 +3847,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
+         )])),
+         env_http_headers: None,
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+@@ -3935,6 +3938,7 @@ async fn env_var_overrides_loaded_auth() {
+         )])),
+         env_http_headers: None,
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/core/tests/suite/client_websockets.rs b/codex-rs/core/tests/suite/client_websockets.rs
+old mode 100755
+new mode 100644
+--- a/codex-rs/core/tests/suite/client_websockets.rs
++++ b/codex-rs/core/tests/suite/client_websockets.rs
+@@ -2280,6 +2280,7 @@ fn websocket_provider_with_connect_timeout(
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: Some(0),
++        max_output_tokens: None,
+         stream_max_retries: Some(0),
+         stream_idle_timeout_ms: Some(5_000),
+         websocket_connect_timeout_ms,
+diff --git a/codex-rs/core/tests/suite/stream_error_allows_next_turn.rs b/codex-rs/core/tests/suite/stream_error_allows_next_turn.rs
+--- a/codex-rs/core/tests/suite/stream_error_allows_next_turn.rs
++++ b/codex-rs/core/tests/suite/stream_error_allows_next_turn.rs
+@@ -76,6 +76,7 @@ async fn continue_after_stream_error() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: Some(1),
++        max_output_tokens: None,
+         stream_max_retries: Some(1),
+         stream_idle_timeout_ms: Some(2_000),
+         websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/core/tests/suite/stream_no_completed.rs b/codex-rs/core/tests/suite/stream_no_completed.rs
+--- a/codex-rs/core/tests/suite/stream_no_completed.rs
++++ b/codex-rs/core/tests/suite/stream_no_completed.rs
+@@ -59,6 +59,7 @@ async fn retries_on_early_close() {
+         env_http_headers: None,
+         // exercise retry path: first attempt yields incomplete stream, so allow 1 retry
+         request_max_retries: Some(0),
++        max_output_tokens: None,
+         stream_max_retries: Some(1),
+         stream_idle_timeout_ms: Some(2000),
+         websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/login/src/auth_env_telemetry.rs b/codex-rs/login/src/auth_env_telemetry.rs
+--- a/codex-rs/login/src/auth_env_telemetry.rs
++++ b/codex-rs/login/src/auth_env_telemetry.rs
+@@ -71,6 +71,7 @@ mod tests {
+             http_headers: None,
+             env_http_headers: None,
+             request_max_retries: None,
++            max_output_tokens: None,
+             stream_max_retries: None,
+             stream_idle_timeout_ms: None,
+             websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/model-provider-info/src/lib.rs b/codex-rs/model-provider-info/src/lib.rs
+--- a/codex-rs/model-provider-info/src/lib.rs
++++ b/codex-rs/model-provider-info/src/lib.rs
+@@ -121,6 +121,11 @@ pub struct ModelProviderInfo {
+     pub env_http_headers: Option<HashMap<String, String>>,
+     /// Maximum number of times to retry a failed HTTP request to this provider.
+     pub request_max_retries: Option<u64>,
++    /// Maximum number of output tokens the model may generate per response;
++    /// forwarded as `max_output_tokens` in Responses API requests. Useful when
++    /// a provider applies a small default cap that causes
++    /// `Incomplete response returned, reason: max_output_tokens` errors.
++    pub max_output_tokens: Option<i64>,
+     /// Number of times to retry reconnecting a dropped streaming response before failing.
+     pub stream_max_retries: Option<u64>,
+     /// Idle timeout (in milliseconds) to wait for activity on a streaming response before treating
+@@ -358,6 +363,7 @@ impl ModelProviderInfo {
+             ),
+             // Use global defaults for retry/timeout unless overridden in config.toml.
+             request_max_retries: None,
++            max_output_tokens: None,
+             stream_max_retries: None,
+             stream_idle_timeout_ms: None,
+             websocket_connect_timeout_ms: None,
+@@ -392,6 +398,7 @@ impl ModelProviderInfo {
+             )])),
+             env_http_headers: None,
+             request_max_retries: None,
++            max_output_tokens: None,
+             stream_max_retries: None,
+             stream_idle_timeout_ms: None,
+             websocket_connect_timeout_ms: None,
+@@ -539,6 +546,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
+         query_params: None,
+         http_headers: None,
+         env_http_headers: None,
++        max_output_tokens: None,
+         request_max_retries: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+diff --git a/codex-rs/model-provider-info/src/model_provider_info_tests.rs b/codex-rs/model-provider-info/src/model_provider_info_tests.rs
+--- a/codex-rs/model-provider-info/src/model_provider_info_tests.rs
++++ b/codex-rs/model-provider-info/src/model_provider_info_tests.rs
+@@ -24,6 +24,7 @@ base_url = "http://localhost:11434/v1"
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+@@ -59,6 +60,7 @@ query_params = { api-version = "2025-04-01-preview" }
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+@@ -98,6 +100,7 @@ supports_standalone_web_search = true
+             "X-Example-Env-Header".to_string() => "EXAMPLE_ENV_VAR".to_string(),
+         }),
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+@@ -176,6 +179,7 @@ fn test_supports_remote_compaction_for_azure_name() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+@@ -202,6 +206,7 @@ fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
+         http_headers: None,
+         env_http_headers: None,
+         request_max_retries: None,
++        max_output_tokens: None,
+         stream_max_retries: None,
+         stream_idle_timeout_ms: None,
+         websocket_connect_timeout_ms: None,
+@@ -311,6 +316,7 @@ fn test_create_amazon_bedrock_provider() {
+             }),
+             env_http_headers: None,
+             request_max_retries: None,
++            max_output_tokens: None,
+             stream_max_retries: None,
+             stream_idle_timeout_ms: None,
+             websocket_connect_timeout_ms: None,
+diff --git a/codex-rs/model-provider/src/provider.rs b/codex-rs/model-provider/src/provider.rs
+--- a/codex-rs/model-provider/src/provider.rs
++++ b/codex-rs/model-provider/src/provider.rs
+@@ -436,6 +436,7 @@ mod tests {
+             http_headers: None,
+             env_http_headers: None,
+             request_max_retries: Some(0),
++            max_output_tokens: None,
+             stream_max_retries: Some(0),
+             stream_idle_timeout_ms: Some(5_000),
+             websocket_connect_timeout_ms: None,
