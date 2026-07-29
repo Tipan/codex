@@ -202,14 +202,25 @@ jobs:
           strip -S -x "$bin"
           ls -lh "$bin"
 
-      - name: Stage binary
+      - name: Build DMG
         shell: bash
         run: |
           set -euo pipefail
+          bin="target/aarch64-apple-darwin/release/codex"
+          dmg_root="${RUNNER_TEMP}/codex-dmg-root"
+          rm -rf "$dmg_root" && mkdir -p "$dmg_root"
+          cp "$bin" "$dmg_root/codex"
+
           dest="dist/aarch64-apple-darwin"
           mkdir -p "$dest"
-          cp "target/aarch64-apple-darwin/release/codex" "$dest/codex-aarch64-apple-darwin"
-          tar -C "$dest" -czf "$dest/codex-aarch64-apple-darwin.tar.gz" "codex-aarch64-apple-darwin"
+          dmg_path="$dest/codex-aarch64-apple-darwin.dmg"
+          hdiutil create \
+            -volname "Codex (aarch64-apple-darwin)" \
+            -srcfolder "$dmg_root" \
+            -format UDZO \
+            -ov \
+            "$dmg_path"
+          ls -lh "$dmg_path"
 
       - uses: actions/upload-artifact@v4
         with:
