@@ -23,7 +23,7 @@ env:
 jobs:
   build:
     name: Build codex (aarch64-apple-darwin)
-    runs-on: macos-15
+    runs-on: macos-15-xlarge
     timeout-minutes: 120
     permissions:
       contents: read
@@ -39,6 +39,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           targets: aarch64-apple-darwin
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@98f714f31ff0f3e5cafd3a6731d03e5aab1f6eab # v2.8.1
+        with:
+          workspaces: codex-rs
 
       - name: Configure rusty_v8 artifact overrides and verify checksums
         uses: ./.github/actions/setup-rusty-v8
