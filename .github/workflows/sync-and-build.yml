@@ -151,12 +151,11 @@ jobs:
             exit 1
           fi
 
-      - name: Set version to <upstream>-maxtok
+      - name: Verify upstream version
         run: |
           set -euo pipefail
-          new_version="${UPSTREAM_VERSION}-maxtok"
-          sed -i '' "s/^version = \".*\"/version = \"${new_version}\"/" codex-rs/Cargo.toml
-          echo "Set version to $new_version"
+          # The upstream tag already has the correct version in Cargo.toml
+          # (e.g. "0.146.0"), so we keep it as-is for full compatibility.
           grep '^version' codex-rs/Cargo.toml | head -1
 
       - name: Commit changes
