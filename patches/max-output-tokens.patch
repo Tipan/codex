@@ -244,7 +244,7 @@ diff --git a/codex-rs/core/src/client_common_tests.rs b/codex-rs/core/src/client
 diff --git a/codex-rs/core/src/compact_tests.rs b/codex-rs/core/src/compact_tests.rs
 --- a/codex-rs/core/src/compact_tests.rs
 +++ b/codex-rs/core/src/compact_tests.rs
-@@ -276,6 +276,7 @@ fn should_use_remote_compact_task_for_azure_provider() {
+@@ -275,6 +275,7 @@ fn should_use_remote_compact_task_for_azure_provider() {
          http_headers: None,
          env_http_headers: None,
          request_max_retries: None,
@@ -290,7 +290,7 @@ diff --git a/codex-rs/core/tests/suite/client.rs b/codex-rs/core/tests/suite/cli
          stream_max_retries: Some(0),
          stream_idle_timeout_ms: Some(5_000),
          websocket_connect_timeout_ms: None,
-@@ -3187,6 +3188,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
+@@ -3182,6 +3183,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
          http_headers: None,
          env_http_headers: None,
          request_max_retries: Some(0),
@@ -298,7 +298,7 @@ diff --git a/codex-rs/core/tests/suite/client.rs b/codex-rs/core/tests/suite/cli
          stream_max_retries: Some(0),
          stream_idle_timeout_ms: Some(5_000),
          websocket_connect_timeout_ms: None,
-@@ -3845,6 +3847,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
+@@ -3840,6 +3842,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
          )])),
          env_http_headers: None,
          request_max_retries: None,
@@ -306,7 +306,7 @@ diff --git a/codex-rs/core/tests/suite/client.rs b/codex-rs/core/tests/suite/cli
          stream_max_retries: None,
          stream_idle_timeout_ms: None,
          websocket_connect_timeout_ms: None,
-@@ -3935,6 +3938,7 @@ async fn env_var_overrides_loaded_auth() {
+@@ -3930,6 +3933,7 @@ async fn env_var_overrides_loaded_auth() {
          )])),
          env_http_headers: None,
          request_max_retries: None,
@@ -375,6 +375,17 @@ diff --git a/codex-rs/model-provider-info/src/lib.rs b/codex-rs/model-provider-i
      /// Number of times to retry reconnecting a dropped streaming response before failing.
      pub stream_max_retries: Option<u64>,
      /// Idle timeout (in milliseconds) to wait for activity on a streaming response before treating
+@@ -264,8 +269,8 @@ impl ModelProviderInfo {
+         let headers = self.build_header_map()?;
+         let retry = ApiRetryConfig {
+             max_attempts: self.request_max_retries(),
+-            base_delay: Duration::from_millis(200),
+-            retry_429: false,
++            base_delay: Duration::from_secs(5),
++            retry_429: true,
+             retry_5xx: true,
+             retry_transport: true,
+         };
 @@ -358,6 +363,7 @@ impl ModelProviderInfo {
              ),
              // Use global defaults for retry/timeout unless overridden in config.toml.
