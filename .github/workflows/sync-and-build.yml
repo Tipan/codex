@@ -94,7 +94,7 @@ jobs:
     name: Build codex ${{ needs.detect.outputs.tag }}
     needs: detect
     if: needs.detect.outputs.should_build == 'true'
-    runs-on: macos-15-xlarge
+    runs-on: macos-15
     timeout-minutes: 120
     permissions:
       contents: write
