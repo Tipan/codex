@@ -119,10 +119,23 @@ jobs:
           git remote add upstream https://github.com/openai/codex.git
           git fetch upstream --tags --depth 1 "$UPSTREAM_TAG"
 
+      - name: Save fork-only files before switching to upstream tag
+        run: |
+          # The upstream tag won't have our patch file or build workflow,
+          # so back them up to /tmp before checking out the tag.
+          mkdir -p /tmp/fork-extras/patches /tmp/fork-extras/.github/workflows
+          cp patches/max-output-tokens.patch /tmp/fork-extras/patches/ 2>/dev/null || true
+          cp .github/workflows/build-codex.yml /tmp/fork-extras/.github/workflows/ 2>/dev/null || true
+          cp .github/workflows/sync-and-build.yml /tmp/fork-extras/.github/workflows/ 2>/dev/null || true
+
       - name: Create build branch from upstream tag
         run: |
           set -euo pipefail
           git checkout -b "build/${UPSTREAM_TAG}" "$UPSTREAM_TAG"
+
+      - name: Restore fork-only files
+        run: |
+          cp -r /tmp/fork-extras/. .
 
       - name: Apply max_output_tokens patch
         run: |
@@ -145,13 +158,6 @@ jobs:
           sed -i '' "s/^version = \".*\"/version = \"${new_version}\"/" codex-rs/Cargo.toml
           echo "Set version to $new_version"
           grep '^version' codex-rs/Cargo.toml | head -1
-
-      - name: Copy build workflow into branch
-        run: |
-          # The build-codex.yml from the fork's default branch is already
-          # present in the working tree (checked out before git checkout).
-          # Re-add it since the upstream tag won't have it.
-          git checkout "${{ github.ref_name }}" -- .github/workflows/build-codex.yml 2>/dev/null || true
 
       - name: Commit changes
         run: |
