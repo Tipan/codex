@@ -183,7 +183,15 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
              text,
          };
  
-@@ -904,6 +910,14 @@ impl ModelClient {
+@@ -616,6 +622,7 @@ impl ModelClient {
+         extra_headers.extend(build_responses_headers(
+             self.state.beta_features_header.as_deref(),
+             turn_state.as_ref(),
++            &responses_metadata.session_id,
+         ));
+         add_originator_header(&mut extra_headers, self.state.originator.as_str());
+         extra_headers.extend(self.build_responses_compatibility_headers(responses_metadata));
+@@ -904,6 +911,14 @@ impl ModelClient {
          );
          let prompt_cache_key = Some(self.prompt_cache_key(responses_metadata));
          let service_tier = model_info.service_tier_for_request(service_tier);
@@ -198,7 +206,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
          let request = ResponsesApiRequest {
              model: model_info.slug.clone(),
              instructions,
-@@ -918,6 +932,7 @@ impl ModelClient {
+@@ -918,6 +933,7 @@ impl ModelClient {
              include,
              service_tier,
              prompt_cache_key,
@@ -206,6 +214,47 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
              text,
              client_metadata: Some(responses_metadata.client_metadata()),
          };
+@@ -1085,6 +1101,7 @@ impl ModelClient {
+         let mut headers = build_responses_headers(
+             self.state.beta_features_header.as_deref(),
+             /*turn_state*/ None,
++            &responses_metadata.session_id,
+         );
+         add_originator_header(&mut headers, self.state.originator.as_str());
+         if let Ok(header_value) = HeaderValue::from_str(&responses_metadata.thread_id) {
+@@ -1153,6 +1170,7 @@ impl ModelClientSession {
+                 let mut headers = build_responses_headers(
+                     self.client.state.beta_features_header.as_deref(),
+                     Some(&self.turn_state),
++                    &responses_metadata.session_id,
+                 );
+                 add_originator_header(&mut headers, self.client.state.originator.as_str());
+                 headers.extend(
+@@ -1887,6 +1905,7 @@ fn stamp_ws_stream_request_start_ms(request: &mut ResponsesWsRequest<'_>) {
+ fn build_responses_headers(
+     beta_features_header: Option<&str>,
+     turn_state: Option<&Arc<OnceLock<String>>>,
++    session_id: &str,
+ ) -> ApiHeaderMap {
+     let mut headers = ApiHeaderMap::new();
+     if let Some(value) = beta_features_header
+@@ -1901,6 +1920,16 @@ fn build_responses_headers(
+     {
+         headers.insert(X_CODEX_TURN_STATE_HEADER, header_value);
+     }
++    // modelhub: route requests from the same session to the same backend
++    // account so that encrypted reasoning content and prompt caching work.
++    if let Ok(extra_value) =
++        HeaderValue::from_str(&format!("{{\"session_id\":\"{session_id}\"}}"))
++    {
++        headers.insert("extra", extra_value);
++    }
++    if let Ok(logid_value) = HeaderValue::from_str(session_id) {
++        headers.insert("X-TT-logid", logid_value);
++    }
+     headers
+ }
+ 
 diff --git a/codex-rs/core/src/client_common_tests.rs b/codex-rs/core/src/client_common_tests.rs
 --- a/codex-rs/core/src/client_common_tests.rs
 +++ b/codex-rs/core/src/client_common_tests.rs
